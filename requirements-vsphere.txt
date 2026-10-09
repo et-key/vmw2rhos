@@ -1,0 +1,2 @@
+# Optional: only needed for vCenter discovery; local planning remains dependency-free.
+pyvmomi>=8.0.3,<10

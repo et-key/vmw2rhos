@@ -11,13 +11,13 @@ const defaults = {
 };
 const options = {'vms.mode':['warm','cold'],'volumes.kind':['virtual-disk','external','shared','special'],'volumes.strategy':['copy','reuse','reconnect','manual'],'volumes.access':['single-writer','multi-writer','read-only'],'nics.mac_policy':['preserve','regenerate'],'nics.ip_policy':['preserve','change'],'actions.kind':['os-upgrade','driver-change','script','manual'],'actions.phase':['before','before-cutover','after'],'actions.failure_policy':['stop','manual'],'rules.kind':['namespace','network','storage']};
 const optionNames={warm:'Warm（事前転送）',cold:'Cold（停止後転送）','virtual-disk':'仮想ディスク',external:'外部接続',shared:'共有領域',special:'特殊デバイス',copy:'コピー',reuse:'継続利用',reconnect:'再接続',manual:'手動対応','single-writer':'単一書込み','multi-writer':'複数書込み','read-only':'読取り専用',preserve:'保持',regenerate:'再生成',change:'変更','os-upgrade':'OS更新','driver-change':'ドライバー変更',script:'独自処理',before:'移行前','before-cutover':'切替前',after:'移行後',stop:'停止',namespace:'Namespace',network:'ネットワーク',storage:'ストレージ'};
-let data, revision, active='vms', dirty=false, selected=new Set(), pendingImport=null;
+let data, revision, active='vms', dirty=false, selected=new Set(), pendingImport=null, observation=null, comparison=null;
 const $ = id=>document.getElementById(id);
 function element(tag,text){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;}
 function message(text,error=false){$('message').textContent=text;$('message').className=error?'error':'';}
 async function request(path,body){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const result=await r.json();if(!r.ok)throw Error(result.error);return result;}
 function updateRevision(){$('revision').textContent=`保存版 ${revision}${dirty?' • 未保存の変更あり':''}`;}
-function changed(){dirty=true;updateRevision();$('results').replaceChildren(element('h2','編集内容が変わりました'),element('p','再度、事前チェックを実行してください。'));}
+function changed(){dirty=true;updateRevision();$('results').replaceChildren(element('h2','編集内容が変わりました'),element('p','再度、事前チェックを実行してください。'));comparison=null;$('comparisonTable').replaceChildren();$('comparisonStatus').textContent='編集内容が変わりました。再度diffを表示してください。既存の実測は古い計画として判定されます。';}
 function convert(field,value){const template=defaults[active][field];if(Array.isArray(template))return value.split(',').map(x=>x.trim()).filter(Boolean);if(typeof template==='boolean'){if(!['true','false'].includes(value))throw Error('確認済みは true / false で指定してください。');return value==='true';}if(typeof template==='number'||field.endsWith('_vlan')){if(field.endsWith('_vlan')&&value==='')return null;if(!/^\d+$/.test(value))throw Error('整数を入力してください。');return Number(value);}return value;}
 function render(){
  $('tabs').replaceChildren();for(const [key,label] of Object.entries(labels)){const b=element('button',`${label} (${data[key].length})`);b.className=key===active?'active':'';b.onclick=()=>{active=key;selected.clear();render();};$('tabs').append(b);}
@@ -44,4 +44,18 @@ action('bulk',()=>{if(!selected.size)throw Error('行を選択してください
 $('search').oninput=render;
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 request('/api/inventory').then(saved=>{data=saved.inventory;revision=saved.revision;render();}).catch(e=>message(e.message,true));
+
+const comparisonLabels={'planned-change':'計画した変更',unchanged:'計画上は維持',unresolved:'計画が未確定','stale-observation':'別の計画の実測','missing-resource':'移行先の対象が欠落',unobserved:'実測値が未取得',mismatch:'計画と不一致','expected-change':'計画した変更と一致',match:'計画と一致','unexpected-resource':'計画にない対象'};
+const compareFields={name:'VM名',namespace:'配置先（元フォルダー → Namespace）',os:'OS',capacity_gib:'容量 GiB',destination:'領域の対応先',access:'アクセス要件',vms:'関連VM',network:'接続ネットワーク',vlan:'VLAN',vm:'接続VM',rule:'配置ルール',resource:'対象全体'};
+function displayValue(value){if(value===null||value===undefined||value==='')return '未設定・未取得';return typeof value==='object'?JSON.stringify(value,null,2):String(value);}
+function renderComparison(){const table=$('comparisonTable');table.replaceChildren();if(!comparison)return;const head=element('thead'),hr=element('tr');for(const title of ['対象','項目','移行元','計画した移行先','実測した移行先','判定'])hr.append(element('th',title));head.append(hr);table.append(head);const body=element('tbody');for(const row of comparison.rows){if($('differencesOnly').checked&&['match','unchanged'].includes(row.status))continue;const tr=element('tr');tr.dataset.status=row.status;for(const value of [`${labels[row.table]} / ${row.id}`,compareFields[row.field],displayValue(row.source),displayValue(row.expected),displayValue(row.observed),comparisonLabels[row.status]])tr.append(element('td',value));body.append(tr);}table.append(body);
+ const summary=Object.entries(comparison.counts).map(([status,count])=>`${comparisonLabels[status]} ${count}件`).join(' / ');$('comparisonStatus').textContent=`${summary||'対象なし'}。${comparison.captured_at?`実測日時: ${comparison.captured_at}。`:''}${comparison.observation_stale?'実測の計画識別子が異なります。現在の計画で再取得してください。':comparison.observed_fields_match?'比較対象の実測項目は一致しています。':'未確定・未取得・不一致の項目を確認してください。'} この比較だけで移行完了とは判定しません。`;
+}
+async function refreshComparison(candidate=observation){const snapshot=JSON.stringify(data);const report=await request('/api/compare',{inventory:JSON.parse(snapshot),observation:candidate});if(JSON.stringify(data)!==snapshot)throw Error('比較中に編集されました。再度diffを表示してください。');observation=candidate;comparison=report;renderComparison();}
+action('compare',()=>refreshComparison());
+action('observationTemplate',async()=>{const template=await request('/api/observation-template',{inventory:data});download('target-observation.json',template);message('実測値はすべてnullです。移行先で確認した値と取得日時を入力してください。計画値を実測値として転記しないでください。');});
+$('observationImport').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2_000_000)throw Error('実測JSONは2MB以内です。');await refreshComparison(JSON.parse(await file.text()));message('移行先の実測を比較しました。');}catch(error){message(error.message,true);}finally{e.target.value='';}};
+action('clearObservation',()=>refreshComparison(null));
+action('exportComparison',()=>{if(!comparison)throw Error('先にdiffを表示してください。');download('migration-diff.json',comparison);});
+$('differencesOnly').onchange=renderComparison;
 

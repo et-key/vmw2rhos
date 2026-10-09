@@ -8,5 +8,8 @@
 <section class="tools"><input id="search" type="search" placeholder="名前・設定から検索" aria-label="行を検索"><button id="add">行を追加</button><button id="remove">選択行を削除</button><select id="bulkField" aria-label="一括編集する項目"></select><input id="bulkValue" placeholder="一括設定値" aria-label="一括設定値"><button id="bulk">選択行に適用</button></section>
 <p id="hint"></p><div class="table-wrap"><table id="editor"></table></div>
 <section id="results"><h2>事前チェック結果</h2><p>編集後に「事前チェック」を押してください。</p></section>
+<section id="comparison"><h2>移行元・計画・移行先の比較</h2><p>計画した変更と、移行先で実際に確認した値を分けて表示します。</p>
+<div class="toolbar"><button id="compare">計画diffを表示</button><button id="observationTemplate">移行先実測テンプレート</button><label class="file">移行先実測JSONを取り込む<input id="observationImport" type="file" accept=".json,application/json"></label><button id="clearObservation">実測を外す</button><button id="exportComparison">比較結果を書き出す</button><label><input id="differencesOnly" type="checkbox">差分・未確認だけ</label></div>
+<p id="comparisonStatus" role="status">実測がない場合、計画の比較のみ行います。</p><div class="table-wrap"><table id="comparisonTable"></table></div></section>
 </main><footer>元の構成と移行先の設定を分けて保存します。共通対応より個別設定が優先されます。</footer></body></html>
 

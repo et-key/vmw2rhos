@@ -94,6 +94,22 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(context.exception.code, 404)
         context.exception.close()
 
+    def test_comparison_api_and_blank_observation_template(self):
+        with self.request('/api/sample') as response:
+            inventory = json.load(response)
+        with self.request('/api/compare', {'inventory': inventory}) as response:
+            report = json.load(response)
+            self.assertIn('planned-change', report['counts'])
+            self.assertFalse(report['migration_verified'])
+        with self.request('/api/observation-template', {'inventory': inventory}) as response:
+            template = json.load(response)
+            self.assertEqual(template['plan_fingerprint'], report['plan_fingerprint'])
+            self.assertTrue(all(v is None for r in template['resources'] for v in r['values'].values()))
+        with self.assertRaises(HTTPError) as context:
+            self.request('/api/compare', {'inventory': inventory, 'observation': {}})
+        self.assertEqual(context.exception.code, 400)
+        context.exception.close()
+
 
 if __name__ == '__main__':
     unittest.main()

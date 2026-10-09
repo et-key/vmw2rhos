@@ -60,7 +60,8 @@ def validate_inventory(data):
                     continue
                 if type(value) is not expected:
                     raise ValueError(f'{table}.{key}: 型が不正です。')
-                if expected is str and len(value) > 8192:
+                limit = 1_000_000 if table == 'placements' and key == 'source_rule' else 8192
+                if expected is str and len(value) > limit:
                     raise ValueError(f'{table}.{key}: 値が長すぎます。')
                 if expected is list and (any(type(v) is not str or not v for v in value) or len(set(value)) != len(value)):
                     raise ValueError(f'{table}.{key}: 重複のないID配列を指定してください。')

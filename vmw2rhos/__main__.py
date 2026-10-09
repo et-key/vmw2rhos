@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .planner import build_plan
+from .comparison import compare, observation_template
 from .store import ConflictError, Store
 
 WEB = Path(__file__).parent / 'web'
@@ -74,7 +75,7 @@ def make_handler(store, port):
             if not self.allowed():
                 return
             path = urlsplit(self.path).path
-            if path not in ('/api/inventory', '/api/check'):
+            if path not in ('/api/inventory', '/api/check', '/api/compare', '/api/observation-template'):
                 self.reply(404, {'error': '見つかりません。'})
                 return
             try:
@@ -88,6 +89,10 @@ def make_handler(store, port):
                     raise ValueError('JSONオブジェクトを指定してください。')
                 if path == '/api/check':
                     self.reply(200, build_plan(data.get('inventory')))
+                elif path == '/api/compare':
+                    self.reply(200, compare(data.get('inventory'), data.get('observation')))
+                elif path == '/api/observation-template':
+                    self.reply(200, observation_template(data.get('inventory')))
                 else:
                     self.reply(200, store.save(data.get('inventory'), data.get('revision')))
             except ConflictError as error:
