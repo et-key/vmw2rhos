@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "vms": [
+    {"id":"vc01:vm-101","name":"storage01","os":"Linux (サンプル)","folder":"production","namespace":"","target_name":"storage01","mode":"cold","group":"business","dependencies":[]},
+    {"id":"vc01:vm-102","name":"app01","os":"Windows (サンプル)","folder":"production","namespace":"","target_name":"app01","mode":"warm","group":"business","dependencies":["vc01:vm-101"]}
+  ],
+  "volumes": [
+    {"id":"disk-storage-os","vms":["vc01:vm-101"],"source":"datastore01","kind":"virtual-disk","purpose":"OS","capacity_gib":40,"target_gib":40,"strategy":"copy","storage_class":"","endpoint":"","access":"single-writer","consistency":"","verified":true},
+    {"id":"disk-app-os","vms":["vc01:vm-102"],"source":"datastore01","kind":"virtual-disk","purpose":"OS","capacity_gib":80,"target_gib":80,"strategy":"copy","storage_class":"","endpoint":"","access":"single-writer","consistency":"","verified":true},
+    {"id":"shared-data","vms":["vc01:vm-101","vc01:vm-102"],"source":"external-server/data","kind":"external","purpose":"共有データ","capacity_gib":500,"target_gib":500,"strategy":"reuse","storage_class":"","endpoint":"nfs.example.invalid:/data","access":"multi-writer","consistency":"切替前に関連サービスを停止し、書込みを停止する","verified":false}
+  ],
+  "nics": [
+    {"id":"nic-storage","vm":"vc01:vm-101","source":"PG-business","source_vlan":120,"target_network":"","target_vlan":120,"mac_policy":"preserve","ip_policy":"preserve","verified":false},
+    {"id":"nic-app","vm":"vc01:vm-102","source":"PG-business","source_vlan":120,"target_network":"","target_vlan":120,"mac_policy":"preserve","ip_policy":"preserve","verified":false}
+  ],
+  "placements": [
+    {"id":"rule-separate","vms":["vc01:vm-101","vc01:vm-102"],"source_rule":"VM同士のAnti-Affinity (必須)","target_rule":"異なるノードへの必須配置。変換方法は未確認。","verified":false}
+  ],
+  "actions": [
+    {"id":"upgrade-app","vm":"vc01:vm-102","kind":"os-upgrade","phase":"before","definition":"","success_condition":"OSバージョンとアプリケーションの起動を確認","failure_policy":"stop","verified":false}
+  ],
+  "rules": [
+    {"id":"ns-production","kind":"namespace","source":"production","target":"production-vms"},
+    {"id":"network-business","kind":"network","source":"PG-business","target":"business-net"},
+    {"id":"storage-default","kind":"storage","source":"datastore01","target":"vm-storage"}
+  ]
+}
